@@ -122,14 +122,32 @@ app.post("/signup", async (req, res) => {
 
 // AUTH MIDDLEWARE
 function verifyToken(req, res, next) {
-  const token = req.cookies && req.cookies.token;
-  if (!token) return res.status(401).send({ msg: "No token provided", success: false });
+  // try cookie first
+  let token = req.cookies && req.cookies.token;
+
+  // fallback: Authorization header "Bearer <token>"
+  if (!token && req.headers && req.headers.authorization) {
+    const parts = req.headers.authorization.split(" ");
+    if (parts.length === 2 && /^Bearer$/i.test(parts[0])) {
+      token = parts[1];
+    }
+  }
+
+  if (!token) {
+    return res.status(401).send({ msg: "No token provided", success: false });
+  }
+
   jwt.verify(token, process.env.JWT_SECRET || "Google", (err, decoded) => {
-    if (err) return res.status(401).send({ msg: "Invalid Token", success: false });
+    if (err) {
+      // log error to help debugging
+      console.error("JWT verify error:", err && err.message ? err.message : err);
+      return res.status(401).send({ msg: "Invalid Token", success: false });
+    }
     req.user = decoded;
     next();
   });
 }
+
 
 // TASK ROUTES
 app.post("/add-task", verifyToken, async (req, res) => {
