@@ -13,25 +13,46 @@ const app = express();
 app.use(express.json());
 app.use(cookieParser());
 
-// SAFE CORS + preflight
+// SAFE CORS
 const allowedOrigins = [
-  process.env.CLIENT_URL,
+  process.env.CLIENT_URL, // set this on Render to your Vercel URL
   "http://localhost:5173",
-  "http://localhost:3000"
+  "http://localhost:3000",
 ].filter(Boolean);
 
 app.use(cors({
   origin: function (origin, callback) {
+    // allow non-browser requests (no origin)
     if (!origin) return callback(null, true);
     if (allowedOrigins.includes(origin)) return callback(null, true);
     return callback(new Error("CORS not allowed"));
   },
   credentials: true,
 }));
-app.options("/*", cors({
-  origin: allowedOrigins,
-  credentials: true
-}));
+
+// --- PRE-FLIGHT HANDLER (safe, avoids app.options) ---
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+
+  if (!origin) {
+    // non-browser clients (curl/Postman) — allow
+    res.header("Access-Control-Allow-Origin", "*");
+  } else if (allowedOrigins.includes(origin)) {
+    // browser requests from allowed origins
+    res.header("Access-Control-Allow-Origin", origin);
+    res.header("Access-Control-Allow-Credentials", "true");
+  }
+
+  // Common CORS headers
+  res.header("Access-Control-Allow-Methods", "GET,PUT,POST,DELETE,OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(204);
+  }
+  next();
+});
+// --- END PRE-FLIGHT HANDLER ---
 
 // helper for cookie options
 const cookieOpts = {
@@ -101,7 +122,7 @@ function verifyToken(req, res, next) {
   });
 }
 
-// TASK ROUTES (same as yours)
+// TASK ROUTES
 app.post("/add-task", verifyToken, async (req, res) => {
   try {
     const db = await connection();
