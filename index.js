@@ -10,12 +10,42 @@ dotenv.config();
 
 const app = express();
 app.use(express.json());
+
+
+// CORS setup - allow localhost during dev and your Vercel domain in production
+const allowedOrigins = [
+  process.env.CLIENT_URL, // set on Render to https://your-vercel-url.vercel.app
+  "http://localhost:5173",
+  "http://localhost:3000",
+].filter(Boolean);
+
 app.use(
   cors({
-    origin: process.env.CLIENT_URL || "http://localhost:5173",
+    origin: (origin, cb) => {
+      // allow requests with no origin (Postman, curl)
+      if (!origin) return cb(null, true);
+      if (allowedOrigins.includes(origin)) return cb(null, true);
+      cb(new Error("CORS error: origin not allowed"), false);
+    },
     credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
+
+// make sure preflight OPTIONS requests are handled
+app.options("*", cors({
+  origin: (origin, cb) => {
+    if (!origin) return cb(null, true);
+    if (allowedOrigins.includes(origin)) return cb(null, true);
+    cb(new Error("CORS error: origin not allowed"), false);
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+}));
+
+
 app.use(cookieParser());
 
 app.post("/login", async (req, res) => {
