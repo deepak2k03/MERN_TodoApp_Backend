@@ -1,4 +1,4 @@
-// index.js (safe, minimal)
+// index.js (safe, defensive preflight)
 import express from "express";
 import { collectionName, connection } from "./dbconfig.js";
 import cors from "cors";
@@ -30,27 +30,36 @@ app.use(cors({
   credentials: true,
 }));
 
-// --- PRE-FLIGHT HANDLER (safe, avoids app.options) ---
+// --- DEFENSIVE PRE-FLIGHT HANDLER (logs errors, never throws) ---
 app.use((req, res, next) => {
-  const origin = req.headers.origin;
+  try {
+    const origin = req.headers.origin;
 
-  if (!origin) {
-    // non-browser clients (curl/Postman) — allow
-    res.header("Access-Control-Allow-Origin", "*");
-  } else if (allowedOrigins.includes(origin)) {
-    // browser requests from allowed origins
-    res.header("Access-Control-Allow-Origin", origin);
-    res.header("Access-Control-Allow-Credentials", "true");
+    if (!origin) {
+      // non-browser clients (curl/Postman) — allow
+      res.header("Access-Control-Allow-Origin", "*");
+    } else if (allowedOrigins.includes(origin)) {
+      // allowed browser origin
+      res.header("Access-Control-Allow-Origin", origin);
+      res.header("Access-Control-Allow-Credentials", "true");
+    } else {
+      // not allowed origin — set a safe header; don't throw
+      res.header("Access-Control-Allow-Origin", "null");
+    }
+
+    // Common CORS headers
+    res.header("Access-Control-Allow-Methods", "GET,PUT,POST,DELETE,OPTIONS");
+    res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+
+    if (req.method === "OPTIONS") {
+      return res.sendStatus(204);
+    }
+    next();
+  } catch (err) {
+    // log full error so Render shows it and return safe 500 JSON
+    console.error("Preflight middleware error:", err && err.stack ? err.stack : err);
+    return res.status(500).send({ success: false, msg: "Server error (CORS)" });
   }
-
-  // Common CORS headers
-  res.header("Access-Control-Allow-Methods", "GET,PUT,POST,DELETE,OPTIONS");
-  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
-
-  if (req.method === "OPTIONS") {
-    return res.sendStatus(204);
-  }
-  next();
 });
 // --- END PRE-FLIGHT HANDLER ---
 
@@ -80,7 +89,7 @@ app.post("/login", async (req, res) => {
     res.cookie("token", token, cookieOpts);
     return res.send({ success: true, msg: "Logged In successfully", token });
   } catch (err) {
-    console.error("Login error:", err.message);
+    console.error("Login error:", err && err.stack ? err.stack : err);
     return res.status(500).send({ success: false, msg: "Server error" });
   }
 });
@@ -106,7 +115,7 @@ app.post("/signup", async (req, res) => {
     res.cookie("token", token, cookieOpts);
     return res.send({ success: true, msg: "User registered successfully", token });
   } catch (err) {
-    console.error("Signup error:", err.message);
+    console.error("Signup error:", err && err.stack ? err.stack : err);
     return res.status(500).send({ success: false, msg: "Server error" });
   }
 });
@@ -131,7 +140,7 @@ app.post("/add-task", verifyToken, async (req, res) => {
     if (result.insertedId) return res.send({ message: "task added", success: true, result });
     return res.status(500).send({ message: "task not added", success: false });
   } catch (err) {
-    console.error("add-task error:", err.message);
+    console.error("add-task error:", err && err.stack ? err.stack : err);
     return res.status(500).send({ message: err.message, success: false });
   }
 });
@@ -143,7 +152,7 @@ app.get("/tasks", verifyToken, async (req, res) => {
     const result = await collection.find().toArray();
     return res.send({ message: "task list fetched", success: true, result });
   } catch (err) {
-    console.error("tasks error:", err.message);
+    console.error("tasks error:", err && err.stack ? err.stack : err);
     return res.status(500).send({ message: "Error Try after some time", success: false });
   }
 });
@@ -158,7 +167,7 @@ app.put("/update-task", verifyToken, async (req, res) => {
     const result = await collection.updateOne({ _id: new ObjectId(_id) }, update);
     return res.send({ message: "task updated", success: true, result });
   } catch (err) {
-    console.error("update-task error:", err.message);
+    console.error("update-task error:", err && err.stack ? err.stack : err);
     return res.status(500).send({ message: "Error Try after some time", success: false });
   }
 });
@@ -172,7 +181,7 @@ app.get("/task/:id", verifyToken, async (req, res) => {
     if (!result) return res.status(404).send({ message: "Task not found", success: false });
     return res.send({ message: "task fetched", success: true, result });
   } catch (err) {
-    console.error("task/:id error:", err.message);
+    console.error("task/:id error:", err && err.stack ? err.stack : err);
     return res.status(500).send({ message: "Error Try after some time", success: false });
   }
 });
@@ -185,7 +194,7 @@ app.delete("/delete/:id", verifyToken, async (req, res) => {
     if (result.deletedCount && result.deletedCount > 0) return res.send({ message: "task deleted", success: true, result });
     return res.status(404).send({ message: "Task not found", success: false });
   } catch (err) {
-    console.error("delete error:", err.message);
+    console.error("delete error:", err && err.stack ? err.stack : err);
     return res.status(500).send({ message: "Error Try after some time", success: false });
   }
 });
@@ -201,7 +210,7 @@ app.delete("/delete-multiple", verifyToken, async (req, res) => {
     if (result.deletedCount && result.deletedCount > 0) return res.send({ message: "tasks deleted", success: true, result });
     return res.send({ message: "No tasks deleted", success: false, result });
   } catch (err) {
-    console.error("delete-multiple error:", err.message);
+    console.error("delete-multiple error:", err && err.stack ? err.stack : err);
     return res.status(500).send({ message: err.message, success: false });
   }
 });
