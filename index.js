@@ -11,39 +11,28 @@ dotenv.config();
 const app = express();
 app.use(express.json());
 
-
-// CORS setup - allow localhost during dev and your Vercel domain in production
+// ---- SAFE CORS FIX ----
 const allowedOrigins = [
-  process.env.CLIENT_URL, // set on Render to https://your-vercel-url.vercel.app
+  process.env.CLIENT_URL,           // your Vercel app URL
   "http://localhost:5173",
-  "http://localhost:3000",
+  "http://localhost:3000"
 ].filter(Boolean);
 
-app.use(
-  cors({
-    origin: (origin, cb) => {
-      // allow requests with no origin (Postman, curl)
-      if (!origin) return cb(null, true);
-      if (allowedOrigins.includes(origin)) return cb(null, true);
-      cb(new Error("CORS error: origin not allowed"), false);
-    },
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-  })
-);
-
-// make sure preflight OPTIONS requests are handled
-app.options("*", cors({
-  origin: (origin, cb) => {
-    if (!origin) return cb(null, true);
-    if (allowedOrigins.includes(origin)) return cb(null, true);
-    cb(new Error("CORS error: origin not allowed"), false);
+app.use(cors({
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error("CORS: Not allowed by policy"));
   },
   credentials: true,
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
 }));
+
+// handle preflight requests
+app.options("*", cors({
+  origin: allowedOrigins,
+  credentials: true,
+}));
+// ---- END CORS FIX ----
 
 
 app.use(cookieParser());
